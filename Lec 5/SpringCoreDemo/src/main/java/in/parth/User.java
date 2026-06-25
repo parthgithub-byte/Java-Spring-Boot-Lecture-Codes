@@ -2,7 +2,7 @@ package in.parth;
 
 import org.springframework.stereotype.Component;
 
-@Component
+//@Component
 public class User {
     private String name;
     private int age;

@@ -1,5 +1,6 @@
 package in.parth;
 
+import in.arjun.CartService;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -21,6 +22,13 @@ public class Main {
         OrderService order = context.getBean(OrderService.class);
 
         order.placeOrder();
+
+        CartService cs = context.getBean(CartService.class);
+        User u1 = context.getBean(User.class);
+
+        System.out.println(u1.getAge());
+
+        cs.addToCart();
 
 /*
 * Read the file notes.md to see the actual flow of the above program

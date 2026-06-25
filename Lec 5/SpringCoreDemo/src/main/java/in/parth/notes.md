@@ -437,3 +437,84 @@ this.paymentService = paymentService;
 O/P:
 Paying by UPI
 Order is placed.
+
+
+# Cases where the @Component does not work, i.e. Sring cannot handle the dependencies
+
+1) When dependency class is a primitive/ non-defined class object
+2) When using external JAR files (with precompiled read-only .class files) for functionalities
+
+First, see the below constructor input:
+
+```java
+package in.parth;
+import org.springframework.stereotype.Component;
+@Component
+public class User {
+private String name;
+private int age;
+
+    public User(String name, int age){
+        this.name = name;
+        this.age = age;
+    }
+//  ....
+```
+O/P:
+Error:-
+No qualifying bean of type 'java.lang.String' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {}
+
+here, you can observe that, even if Spring tries to create a Bean out of this class, it cannot resolve/ figure-out the dependency of the Constructor parameters. It will search for the Beans String and Integer, but it won't get their objects in the context since they are never defined, unlike objects like PaymentService
+
+Similarly, when using the .class form .jar files, we can't really add @Component to the precompiled files. Here, I created another project, installed it to the local repo (.m2) through maven and now we can access it by addid following to the pom.xml of the current project and rebuilding it.
+
+```xml
+<dependency>
+    <groupId>in.arjun</groupId>
+    <artifactId>SpringCoreDemo2</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+Now, I can access its functions very well through the main function by manually creating and pssing the objects (w/o Spring core initializing it).
+```java
+CartService cs = new CartService();
+cs.addToCart();
+```
+
+O/P:
+Added to cart
+
+But can we make spring to handle this? No.
+Yet, we can make spring figure it out: using AppConfig.java
+Using the @Bean annotation, create methods returning the class methods directly:
+
+```java
+    @Bean
+    public User createUser(){
+      return new User("Parth", 21);
+    }
+//    you can name the method anything, the value are for initialization, you can set them anytime after the Beans are formed using setters
+
+    @Bean
+    public CartService createCartService(){
+        return new CartService();
+    }
+```
+
+Using the beans as usual now:
+```java
+CartService cs = context.getBean(CartService.class);
+User u1 = context.getBean(User.class);
+System.out.println(u1.getAge());
+cs.addToCart();
+```
+
+O/P:
+21
+Added to cart
+
+
+Thus Beans can be created in two ways:
+1. @Component: Class wide, normal use
+2. @Bean: Method wide, used when Bean cannot be created in above discussed cases
