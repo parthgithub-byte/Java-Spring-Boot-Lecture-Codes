@@ -109,4 +109,331 @@ O/P:
 Payment done  
 Order is placed.
 
-31:50
+[//]: # (31:50)
+
+Types of DI (Dependency Injections) under Spring IoC container:
+Above we saw the usual DI:
+1) DI using Constructor
+
+```java
+@Autowired
+public OrderService(PaymentService paymentService){
+    this.paymentService = paymentService;
+}
+```
+
+There are also two other types to achieve this in a similar way:
+2) DI using setters:
+
+Similar to how we use constructors for setting up the dependency of one object to other class,
+we use setter methods. This method can be especially intuitive in since, unlike parametrized constructor above,
+we do not require any parameter in the main code while declaring the object to call, however this issue does not occur in Main if context container
+is the one managing the resources anyway. So, obtaining the other class dependency this way becomes round-about if using the Spring IoC container.
+How to do DI using setter?
+=> Just declare the `@Autowired` annotation at the top of the setter instead of the constructor.
+
+```java
+@Autowired
+public void setPaymentService(PaymentService paymentService) {
+    this.paymentService = paymentService;
+}
+```
+
+O/P:
+Payment done
+Order is placed.
+i.e. works fine
+
+3) Field Injection:
+Since our dependency in OrderService is just an instance of class PaymentService that we use its own field,
+we straight up take it from the Beans. Just add the `@Autowired` annotation above the line of dependency field.
+
+```java
+@Autowired
+private PaymentService paymentService;
+```
+
+By the way, in newer versions of spring, if a class has only one constructor, then to add a DI, we do not need
+the `@Autowired` annotation. Spring automatically resolves the dependencies even if we write:
+```java
+public OrderService(PaymentService paymentService){
+    this.paymentService = paymentService;
+}
+```
+
+
+## Why is the Constructor DI mostly preferred?
+- Dependency gets wired at the time of object creation
+- Final can be used
+- Easy to test the class
+
+### 1.
+We know the first point; a constructor is anyway called when an instance is created, so having that same method
+hardwire DI is a much more straightforward design compared to having another setter-like method to do so or 
+direct access to a field like in Field DI. Here, the object literally cannot be created without the dependency.
+The compiler enforces it. This avoids cases of NullPointerException for the class needing dependency.
+
+### 2.
+Now, in Java, final has a very important use-case.
+For variables, final means:
+`This reference can be assigned only once.`
+
+Example:
+
+```java
+final int x = 10;
+x = 20; // ❌ Compile-time error
+```
+
+For object references:
+```java
+final PaymentService paymentService;
+```
+
+means:
+```
+The variable paymentService must point to exactly one object.
+It cannot be reassigned later. 
+```
+
+Now,
+Java allows a final field to be assigned:
+
+1. At declaration
+```java
+final PaymentService paymentService = new PaymentService();
+```
+
+OR
+
+2. Inside a constructor
+```java
+final PaymentService paymentService;
+
+public OrderService(PaymentService paymentService) {
+this.paymentService = paymentService;
+}
+```
+After that assignment, it is locked.
+
+## Why not in a setter?
+because a setter can be called multiple times. Java cannot guarantee "assigned exactly once".
+
+## Why is that beneficial?
+
+Imagine:
+```java
+OrderService orderService = ...
+```
+and later:
+```
+orderService.setPaymentService(new FakePaymentService()); // using some setter method
+```
+Now the dependency changed unexpectedly. This can lead to bugs.
+With constructor injection:
+```java
+private final PaymentService paymentService;
+```
+the dependency is fixed forever.
+
+### 3.
+Why does DI at constructor make unit testing faster?
+Unlike in production, for a unit test, you don't want to call the real payment service 
+(it might contact a database or payment gateway).
+We can easily do the unit tests from the parameterised constructor:
+```java
+PaymentService dummy = new DummyPaymentService();
+OrderService order = new OrderService(dummy);
+```
+[Note, the unit tests usually don't use Spring Core, but plain Java object passing]
+
+# Understanding the Steps of Spring Core Execution in Brief:
+- Step 1: Spring starts the container
+- Step 2: Spring reads AppConfig.java
+  `ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);`
+
+- Step 3: Spring processes @ComponentScan (Into a specific package if classified, else same directory)
+- Step 4: Spring finds @Component classes
+- Step 5: Spring creates Bean definitions (Metadata of Beans to be created for Autowiring, works like PCB)
+  PaymentService:
+  ```json
+  "Bean name" : "paymentService",
+  "Bean class" : "PaymentService",
+  "Bean object" : "new PaymentService()",
+  "Scope" : "ToBeDiscussedInNextLectures",
+  "Dependency" : "no"
+  ```
+- Step 6: Spring starts creating objects
+  ```java
+  PaymentService payment = new PaymentService(); // independent objects are created first
+  OrderSevice order = new OrderService(payment); // requires dependency, handled by Spring itself
+  ```
+- Step 7: Our application uses these beans (int the main block)
+```java
+OrderService order = context.getBean(OrderService.class);
+order.placeOrder();
+```
+
+Right now, there is only one time of PaymentService as dependency for 
+the dependent class. What if there are multiple objects available that
+are components eligible as dependency from above, how are they autowired?
+Right now, our system is tightly coupled. 
+
+Let me first write the present 
+files as they are present right now:
+
+1. Main.java:
+```java
+package in.parth;
+
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+public class Main {
+  static void main() {
+    /*older way*/
+//        PaymentService service = new PaymentService();
+//
+//        OrderService order = new OrderService(service);
+//
+//        order.placeOrder();
+
+    ApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+    OrderService order = context.getBean(OrderService.class);
+    order.placeOrder();
+  }
+}
+
+```
+
+2. AppConfig.java
+```java
+package in.parth;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+@Configuration
+@ComponentScan("in.parth")
+public class AppConfig {
+}
+```
+
+3. OrderService.java
+
+```java
+package in.parth;
+
+import in.parth.payment.PaymentService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+// tells spring core that this is a component that may create or require dependency
+@Component
+public class OrderService {
+  //    Field DI will involve taking the dependency, which is also a filed in the class, directly from the beans
+//    @Autowired
+  private final PaymentService paymentService;
+
+  //    Constructor DI, @Autowired annotation if the class has one and only constructor
+//    @Autowired
+  public OrderService(PaymentService paymentService) {
+    this.paymentService = paymentService;
+  }
+
+//    Setter DI
+//    @Autowired
+//    public void setPaymentService(PaymentService paymentService) {
+//        this.paymentService = paymentService;
+//    }
+
+  public void placeOrder() {
+    paymentService.pay();
+    System.out.println("Order is placed.");
+  }
+}
+```
+
+4. PaymentService.java
+```java
+package in.parth;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class PaymentService {
+    public void pay(){
+        System.out.println("Payment done");
+    }
+}
+```
+
+Now, let us move PaymentService to the package "payment" as
+an interface and create another classes CardPayment and 
+UpiPayment as actual implementations.
+For now, PaymentService is just an interface with no implementaion 
+for the pay() method. So, running the code, I got:
+
+O/P:
+Error:-
+No qualifying bean of type 'in.parth.payment.PaymentService' available: expected at least 1 bean which qualifies as autowire candidate.
+
+as the error. Ok, now remove the annotation `@Component` from above the interface to the actual implementation, 
+say `CardPayment`. [Btw, since PaymentService is an interface now, having or not having the `@Component` annotation
+will not make any difference.]
+
+O/P:
+Paying via card
+Order is placed.
+
+Similar output is generated if the annotation component is placed in the UpiPayment class instead.
+But what if the annotation @Component is present in both the classes?
+
+O/P:
+Error:-
+Unsatisfied dependency expressed through constructor parameter 0: No qualifying bean of type 'in.parth.payment.PaymentService' available: 
+expected single matching bean but found 2: cardPayment,upiPayment
+
+Solutions:
+1. `@Primary` annotation
+2. `@Qualifier` annotation
+
+Using @Primary gives an easy way out. Just note @Primary on the top of one of the vomponent that you want to always be the one being selected unless sppecified exactly.
+Eg. I am mentioning @Component above both classes but only mentioning @Primary above UPI payment.
+
+O/P:
+Paying by UPI
+Order is placed.
+
+This approach is best when only one service is actually ever needed and we want to show this quickly, eg. other implementations are test classes. 
+However, that is not true in most cases, and even for other being secondary/ test implementations, there should be way to implement even those.
+Solution:
+@Qualifier annotation.
+Since we have multiple Beans eligible to be sent as dependencies, we just need to manually mention which dependency is exactly required out of all the present components 
+to be injected.
+
+Write `@Qualifier` above both the classes similar to the `@Component` annotation.
+Now which qualifier would you actually like to pass in the Constructor where we actually pass the dependency.
+```java
+public OrderService(@Qualifier("cardPayment") PaymentService paymentService){
+        this.paymentService = paymentService;
+}
+```
+
+=> we pass the Bean name, it is the same as the class name, just in the camel case.
+O/P:
+Paying via card
+Order is placed.
+
+Now, even if there is or there is not a @Primary class, we can choose which exact dependency to inject as we need.
+
+We can also set custom bean names through the @Qualifier annotations with parameter strings. 
+Eg: `@Qualifier("up")` or `@Qualifier("cp")`
+
+
+```java
+public OrderService(@Qualifier("up") PaymentService paymentService){
+this.paymentService = paymentService;
+}
+```
+
+O/P:
+Paying by UPI
+Order is placed.
