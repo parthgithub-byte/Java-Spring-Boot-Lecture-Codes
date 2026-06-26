@@ -518,3 +518,166 @@ Added to cart
 Thus Beans can be created in two ways:
 1. @Component: Class wide, normal use
 2. @Bean: Method wide, used when Bean cannot be created in above discussed cases
+
+In AppConfig.java:
+```java
+    @Bean
+    public CardPayment cardPayment(){
+        return new CardPayment();
+    }
+    
+
+    @Bean
+    public OrderService orderService(PaymentService paymentService){
+        return new OrderService(paymentService);
+```
+
+O/P:
+Paying via card
+Order is placed.
+
+W/O writing AutoWired, spring injected one of its bean to another bean as the dependency. This is because, the components unlike the previous time are not
+scattered accross the classes and packages, they are handled in a single file, just like in normal Java code. For the OrderService class, it notices the
+bean/ object CardPayment which is a PaymentService already defined earlier, thus it injects that same one through dependency.
+
+
+Now, if there are two similar type of Beans declared in AppConfig.java, what will happen? Of course Spring won't figure out the exact one as both are eligible.
+
+```java
+    @Bean
+    public CardPayment cardPayment(){
+      return new CardPayment();
+    }
+    
+    @Bean
+    public UpiPayment upiPayment() {
+      return new UpiPayment();
+    }
+    
+    @Bean
+    public OrderService orderService(PaymentService paymentService){
+      return new OrderService(paymentService);
+    }       
+```
+
+O/P:
+Error:-
+expected single matching bean but found 2: cardPayment,upiPayment
+
+Ok, now we can just do the earlier provisions here too. Make one of them primary, or pass through @Qualifier.
+Making UPI Payment class as primary:
+```java
+    @Primary
+    @Bean
+    public UpiPayment upiPayment() {
+      return new UpiPayment();
+    }
+    
+    @Bean
+    public OrderService orderService(PaymentService paymentService){
+      return new OrderService(paymentService);
+    }   
+```
+
+O/P:
+Paying by UPI
+Order is placed.
+
+Or
+Using Qualifiers here also:
+
+```java
+    @Bean
+    @Qualifier("cp")
+    public CardPayment cardPayment(){
+        return new CardPayment();
+    }
+
+    @Primary
+    @Qualifier("up")
+    @Bean
+    public UpiPayment upiPayment() {
+        return new UpiPayment();
+    }
+
+    @Bean
+    public OrderService orderService(@Qualifier("cp") PaymentService paymentService){
+        return new OrderService(paymentService);
+    }
+```
+
+O/P:
+Paying via card
+Order is placed.
+
+Above thing is usually not done, since in AppConfig, we are only creating the necessary targeted objects at a time.
+
+## Problem Of @Bean w/o Constructor D.I.:
+Without constructor dependency and some setter dependency, in our above way, even if the object is created, it will not have the dependency 
+(since in that case, constructor likely has no parameters, but the setter method has).
+
+i.e.
+```java
+@Bean
+public OrderService orderService(PaymentService paymentService){
+return new OrderService(paymentService);
+}
+```
+
+will not work out if D.I. is through:
+```java
+    public void setPaymentService(PaymentService paymentService) {
+        this.paymentService = paymentService;
+    }
+//    b.t.w. if using the setter D.I. make sure to remove final keyword for PaymentService object, it cannot be initiated through setter.
+```
+
+So while creating the object in AppConfig.java, we create the PaymentService Object there itself (using the method to instantiate PaymentService 
+i.e. CardPayment declared in the AppConfig itself), create the OrderService class also, inject dependency through the setter and then only return 
+this new object as a bean.
+
+```java
+    @Bean
+    public OrderService orderService(){
+        PaymentService paymentService = createCardPayment();
+        OrderService order = new OrderService();
+        order.setPaymentService(paymentService);
+        return order;
+    }
+```
+
+Thus, we see another reason why Constructor D.I. is indeed better than using setter. Here we required too many things to be done manually.
+However, we can automate this using the @Autowire annotation. 
+
+In OrderService class, put the @Autowire above the setPaymentService setter method which will then be compulsorily considered by Spring and 
+executed on the OrderService bean object "order" after returning it as an object in the AutoConfig file.
+
+Thus,
+in OrderService:
+
+```java
+    @Autowired
+    public void setPaymentService(PaymentService paymentService) {
+        this.paymentService = paymentService;
+    }
+```
+
+and in AppConfig:
+```java
+    @Bean
+    public OrderService orderService(){
+        OrderService order = new OrderService(); 
+        return order;
+    }
+```
+
+O/P:
+Paying via card
+Order is placed.
+
+## @Bean vs @Component
+
+When we write @Component for a class, but we also create and define a Bean for it in AppConfig.java what object is actually is actually passed in Main?
+Are there 2 objects created? No. Only one Bean is created for the class, and it is the one we created ourselves using @Bean; this is because, 
+we created it ourselves instead of Spring doing it automatically.
+Thus, @Bean >>>> @Component. OG!
